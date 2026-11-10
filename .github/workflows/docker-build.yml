@@ -50,7 +50,7 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:latest
-            ${{ env.IMAGE }}:1.0.0
+            ${{ env.IMAGE }}:1.1.0
 
       - name: Xray scan of the Docker image (pre-push)
         run: |
@@ -76,7 +76,7 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:latest
-            ${{ env.IMAGE }}:1.0.0
+            ${{ env.IMAGE }}:1.1.0
 
       # jf docker push could not match layers in Artifactory, so attach the pushed image to the build explicitly.
       - name: Record Docker image in build-info

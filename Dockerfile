@@ -2,7 +2,7 @@
 FROM composer:2.2 AS vendor
 WORKDIR /app
 COPY composer.json composer.lock* ./
-RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist --no-progress --optimize-autoloader
+RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist --no-progress --optimize-autoloader --ignore-platform-req=ext-fileinfo
 
 # Stage 2: runtime. Older base image on purpose so Xray also reports OS-level findings.
 FROM php:7.4-apache-bullseye
