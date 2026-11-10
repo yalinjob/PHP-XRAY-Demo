@@ -1,0 +1,20 @@
+{
+    "name": "yalinjob/php-xray-demo",
+    "description": "Intentionally vulnerable PHP demo for JFrog Xray scanning. Do not deploy.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=7.4",
+        "guzzlehttp/guzzle": "6.5.5",
+        "guzzlehttp/psr7": "1.8.0",
+        "twig/twig": "2.14.0",
+        "firebase/php-jwt": "5.2.0",
+        "laminas/laminas-diactoros": "2.0.0"
+    },
+    "config": {
+        "platform": { "php": "7.4.33" },
+        "optimize-autoloader": true,
+        "sort-packages": true
+    },
+    "autoload": { "psr-4": { "App\\": "src/" } }
+}

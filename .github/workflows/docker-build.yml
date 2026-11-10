@@ -1,0 +1,110 @@
+name: build-and-push-to-jfrog
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  JF_HOST: solenglatest.jfrog.io
+  JF_REPO: yalin-demo-xray-local
+  IMAGE_NAME: php-xray-demo
+  BUILD_NAME: PHP-XRAY-Demo
+  BUILD_NUMBER: ${{ github.run_number }}
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      IMAGE: solenglatest.jfrog.io/yalin-demo-xray-local/php-xray-demo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history for build-add-git
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Set up JFrog CLI
+        uses: jfrog/setup-jfrog-cli@v4
+        env:
+          JF_URL: https://${{ env.JF_HOST }}
+          JF_ACCESS_TOKEN: ${{ secrets.JF_TOKEN }}
+
+      - name: Log in to JFrog Artifactory (Docker)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.JF_HOST }}
+          username: ${{ secrets.JF_USER }}
+          password: ${{ secrets.JF_TOKEN }}
+
+      # Build into the local daemon first so Xray can scan it before anything is pushed.
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          build-args: APP_VERSION=${{ github.sha }}
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:1.0.0
+
+      - name: Xray scan of the Docker image (pre-push)
+        run: |
+          set -o pipefail
+          # Vulnerabilities are expected in this demo, so report without failing the job.
+          jf docker scan "${IMAGE}:${GITHUB_SHA}" --vuln --fail=false --extended-table | tee xray-image-scan.txt
+          {
+            echo "### Xray image scan"
+            echo '```'
+            tail -n 200 xray-image-scan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Push image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          provenance: false # keep a plain image manifest so build-info can resolve the layers
+          sbom: false
+          build-args: APP_VERSION=${{ github.sha }}
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:1.0.0
+
+      # jf docker push could not match layers in Artifactory, so attach the pushed image to the build explicitly.
+      - name: Record Docker image in build-info
+        run: |
+          echo "${IMAGE}:${GITHUB_SHA}@${{ steps.push.outputs.digest }}" > image-file
+          cat image-file
+          jf rt build-docker-create "$JF_REPO" --image-file image-file --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER"
+
+      - name: Publish build-info
+        run: |
+          jf rt build-add-git "$BUILD_NAME" "$BUILD_NUMBER"
+          jf rt build-collect-env "$BUILD_NAME" "$BUILD_NUMBER"
+          jf rt build-publish "$BUILD_NAME" "$BUILD_NUMBER"
+
+      - name: Xray build scan
+        run: |
+          set -o pipefail
+          jf build-scan "$BUILD_NAME" "$BUILD_NUMBER" --vuln --fail=false --extended-table | tee xray-build-scan.txt
+          {
+            echo "### Xray build scan: ${BUILD_NAME} #${BUILD_NUMBER}"
+            echo '```'
+            tail -n 200 xray-build-scan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xray-scan-results
+          path: xray-*.txt
+          if-no-files-found: ignore
